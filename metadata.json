@@ -1,0 +1,6 @@
+{
+  "name": "Ar-Rahmah Photobooth",
+  "description": "A responsive tablet landscape Photobooth with frame overlays, custom countdown, camera access, and a Google Apps Script integration for saving images to Google Drive with QR codes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
