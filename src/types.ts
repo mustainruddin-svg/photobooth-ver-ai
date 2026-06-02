@@ -18,4 +18,5 @@ export interface AppSettings {
   customText: string;
   cameraDeviceId: string;
   imageQuality: number;
+  customOverlay: string | null;
 }

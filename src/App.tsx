@@ -17,6 +17,7 @@ export default function App() {
     customText: "Wisuda SIT Ar-Rahmah",
     cameraDeviceId: "",
     imageQuality: 0.9,
+    customOverlay: null,
   });
 
   const handlePhotoCaptured = (imageBytes: string, frameId: string) => {

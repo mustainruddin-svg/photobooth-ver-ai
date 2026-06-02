@@ -196,6 +196,21 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     }, 1000);
   };
 
+  const handleCustomOverlayUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== "image/png") {
+        alert("Please upload a PNG file with transparency.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSettings({ ...settings, customOverlay: event.target?.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const performCapture = async () => {
     if (!videoRef.current) return;
     
@@ -230,29 +245,49 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     // Reset transform to draw frame overlay in correct orientation
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Merge Selected Frame SVG on top of the mirrored image
-    const svgStr = selectedFrame.getSvgString(width, height, settings.customText);
-    
-    const svgImage = new Image();
-    
-    const svgPromise = new Promise<string>((resolve, reject) => {
-      svgImage.onload = () => {
-        ctx.drawImage(svgImage, 0, 0, width, height);
-        // Convert to high quality JPEG
-        const finalUrl = canvas.toDataURL("image/jpeg", settings.imageQuality);
-        resolve(finalUrl);
-      };
-      svgImage.onerror = (e) => reject(e);
-      svgImage.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
-    });
+    if (settings.customOverlay) {
+      const img = new Image();
+      const promise = new Promise<string>((resolve, reject) => {
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", settings.imageQuality));
+        };
+        img.onerror = (e) => reject(e);
+        img.src = settings.customOverlay;
+      });
+      try {
+        const finalImageBytes = await promise;
+        onPhotoCaptured(finalImageBytes, "custom-png");
+      } catch (e) {
+        console.error("Error blending image with custom overlay:", e);
+      } finally {
+        setIsCapturing(false);
+      }
+    } else {
+      // Merge Selected Frame SVG on top of the mirrored image
+      const svgStr = selectedFrame.getSvgString(width, height, settings.customText);
+      
+      const svgImage = new Image();
+      
+      const svgPromise = new Promise<string>((resolve, reject) => {
+        svgImage.onload = () => {
+          ctx.drawImage(svgImage, 0, 0, width, height);
+          // Convert to high quality JPEG
+          const finalUrl = canvas.toDataURL("image/jpeg", settings.imageQuality);
+          resolve(finalUrl);
+        };
+        svgImage.onerror = (e) => reject(e);
+        svgImage.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+      });
 
-    try {
-      const finalImageBytes = await svgPromise;
-      onPhotoCaptured(finalImageBytes, selectedFrame.id);
-    } catch (e) {
-      console.error("Error blending image with frame overlay:", e);
-    } finally {
-      setIsCapturing(false);
+      try {
+        const finalImageBytes = await svgPromise;
+        onPhotoCaptured(finalImageBytes, selectedFrame.id);
+      } catch (e) {
+        console.error("Error blending image with frame overlay:", e);
+      } finally {
+        setIsCapturing(false);
+      }
     }
   };
 
@@ -263,14 +298,16 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         
         {/* Dynamic Frame Overlay Rendering directly in DOM for lag-free preview */}
         <div className="absolute inset-0 z-10 pointer-events-none">
-          {isCameraActive && (
+          {isCameraActive && settings.customOverlay ? (
+            <img src={settings.customOverlay} alt="Custom Overlay" className="w-full h-full object-fill pointer-events-none" />
+          ) : isCameraActive ? (
             <div 
               className="w-full h-full"
               dangerouslySetInnerHTML={{ 
                 __html: selectedFrame.getSvgString(1280, 720, settings.customText) 
               }} 
             />
-          )}
+          ) : null}
         </div>
 
         {/* Live Video Preview container */}
@@ -414,8 +451,30 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
 
           <div className="h-[1px] bg-[#e0e0e0] w-full" />
 
+          {/* Custom PNG Frame Upload Option */}
+          <div className="w-full flex items-center justify-between bg-[#fafafa] border border-[#d1d1d1] rounded-[6px] p-3">
+             <div className="flex flex-col">
+               <span className="text-[13px] font-medium text-[#111111]">Custom PNG Frame</span>
+               <span className="text-[11px] text-[#666666]">Upload transparent 16:9 image</span>
+             </div>
+             <div className="flex items-center space-x-2">
+               {settings.customOverlay && (
+                 <button 
+                   onClick={() => setSettings({ ...settings, customOverlay: null })}
+                   className="text-[12px] font-medium text-[#d93025] hover:underline"
+                 >
+                   Remove
+                 </button>
+               )}
+               <label className="px-3 py-1.5 bg-[#111111] text-white text-[12px] font-medium rounded-[4px] cursor-pointer hover:bg-[#333333] transition-colors">
+                 Upload
+                 <input type="file" accept="image/png" className="hidden" onChange={handleCustomOverlayUpload} />
+               </label>
+             </div>
+          </div>
+
           {/* Grid Selection list */}
-          <div className="grid grid-cols-2 gap-3 flex-1 overflow-y-auto max-h-[190px] pr-1 mt-2">
+          <div className={`grid grid-cols-2 gap-3 flex-1 overflow-y-auto max-h-[190px] pr-1 mt-2 ${settings.customOverlay ? "opacity-50 pointer-events-none" : ""}`}>
             {FRAME_TEMPLATES.map((tpl) => {
               const isSelected = selectedFrame.id === tpl.id;
               return (
