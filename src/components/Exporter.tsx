@@ -98,26 +98,21 @@ function doPost(e) {
       id: file.getId(),
       url: downloadUrl,
       filename: filename
-    })).setMimeType(ContentService.MimeType.JSON)
-       .setHeader("Access-Control-Allow-Origin", "*");
+    })).setMimeType(ContentService.MimeType.JSON);
        
   } catch (err) {
     // Return Error response jika ada kegagalan proses
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: err.toString()
-    })).setMimeType(ContentService.MimeType.JSON)
-       .setHeader("Access-Control-Allow-Origin", "*");
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 // Handler untuk mem-bypass error pre-flight CORS preflight di browser
 function doOptions(e) {
   return ContentService.createTextOutput("")
-    .setMimeType(ContentService.MimeType.TEXT)
-    .setHeader("Access-Control-Allow-Origin", "*")
-    .setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-    .setHeader("Access-Control-Allow-Headers", "Content-Type");
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 `;
 

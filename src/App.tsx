@@ -1,14 +1,16 @@
-import React, { useState } from "react";
-import { Camera, FileCode, HardDrive, HelpCircle, LayoutGrid, ToggleLeft, ToggleRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Camera, FileCode, HardDrive, HelpCircle, LayoutGrid, ToggleLeft, ToggleRight, Settings } from "lucide-react";
 import { AppSettings } from "./types";
 import Photobooth from "./components/Photobooth";
 import PostCaptureModal from "./components/PostCaptureModal";
 import Exporter from "./components/Exporter";
+import { SettingsView } from "./components/SettingsView";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"terminal" | "export">("terminal");
+  const [activeTab, setActiveTab] = useState<"terminal" | "settings" | "export">("terminal");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedFrameId, setCapturedFrameId] = useState<string>("royal-gold");
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
 
   // Global applet configuration states
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -41,6 +43,29 @@ export default function App() {
     }
   }, [settings.googleAppsScriptUrl, settings.isSimulatorMode]);
 
+  useEffect(() => {
+    async function getDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        setCameras(videoDevices);
+        if (videoDevices.length > 0 && !settings.cameraDeviceId) {
+          setSettings((prev) => ({
+            ...prev,
+            cameraDeviceId: videoDevices[0].deviceId,
+          }));
+        }
+      } catch (err) {
+        console.error("Error listing system cameras", err);
+      }
+    }
+    getDevices();
+    
+    // Add event listener for when permissions change
+    navigator.mediaDevices.addEventListener('devicechange', getDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', getDevices);
+  }, [settings.cameraDeviceId]);
+
   const handlePhotoCaptured = (imageBytes: string, frameId: string) => {
     setCapturedImage(imageBytes);
     setCapturedFrameId(frameId);
@@ -72,7 +97,18 @@ export default function App() {
               }`}
             >
               <Camera className="w-4 h-4" />
-              <span>Overview</span>
+              <span>Camera</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`px-3 py-1.5 rounded-[6px] font-medium text-[13px] transition-all duration-150 flex items-center space-x-2 cursor-pointer ${
+                activeTab === "settings"
+                  ? "bg-white text-[#111111] shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+                  : "text-[#666666] hover:bg-[#e5e5e5]"
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
             </button>
             <button
               onClick={() => setActiveTab("export")}
@@ -110,12 +146,16 @@ export default function App() {
         {/* Tab view containers */}
         <div className="flex-1 flex overflow-hidden w-full h-full justify-center">
           {activeTab === "terminal" ? (
-            <div className="w-full h-full max-w-[1000px] overflow-y-auto px-8 py-8 items-start">
+            <div className="w-full h-full overflow-y-auto items-start flex flex-col justify-center">
                <Photobooth
                 settings={settings}
                 setSettings={setSettings}
                 onPhotoCaptured={handlePhotoCaptured}
                />
+            </div>
+          ) : activeTab === "settings" ? (
+            <div className="w-full h-full overflow-y-auto">
+              <SettingsView settings={settings} setSettings={setSettings} cameras={cameras} />
             </div>
           ) : (
             <div className="w-full h-full overflow-y-auto p-8 flex items-center justify-center flex-col">

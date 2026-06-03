@@ -12,9 +12,9 @@ interface PhotoboothProps {
 
 export default function Photobooth({ settings, setSettings, onPhotoCaptured }: PhotoboothProps) {
   const [selectedFrame, setSelectedFrame] = useState<FrameTemplate>(FRAME_TEMPLATES[0]);
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   
   // Countdown and Flash States
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -99,26 +99,6 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     }
   };
 
-  // Enumerate cameras
-  useEffect(() => {
-    async function getDevices() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter((d) => d.kind === "videoinput");
-        setCameras(videoDevices);
-        if (videoDevices.length > 0 && !settings.cameraDeviceId) {
-          setSettings({
-            ...settings,
-            cameraDeviceId: videoDevices[0].deviceId,
-          });
-        }
-      } catch (err) {
-        console.error("Error listing systems cameras", err);
-      }
-    }
-    getDevices();
-  }, [settings.cameraDeviceId]);
-
   // Handle active camera streaming
   useEffect(() => {
     let active = true;
@@ -162,7 +142,6 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           // Re-enumerate devices now that permission is granted
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter((d) => d.kind === "videoinput");
-          setCameras(videoDevices);
           if (videoDevices.length > 0 && !settings.cameraDeviceId && videoDevices[0].deviceId) {
             setSettings(prev => ({
               ...prev,
@@ -188,7 +167,7 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [settings.cameraDeviceId]);
+  }, [settings.cameraDeviceId, retryCount]);
 
   const triggerCaptureSequence = () => {
     if (isCapturing || !isCameraActive) return;
@@ -306,9 +285,9 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start w-full mx-auto">
+    <div className="flex flex-col items-center w-full max-w-5xl mx-auto space-y-6">
       {/* CAMERA SCREEN PREVIEW AREA */}
-      <div className="lg:col-span-8 flex flex-col justify-between bg-[#111111] rounded-[8px] relative shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden aspect-video">
+      <div className="flex flex-col justify-between bg-[#111111] rounded-[8px] relative shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden aspect-video w-full">
         
         {/* Dynamic Frame Overlay Rendering directly in DOM for lag-free preview */}
         <div className="absolute inset-0 z-10 pointer-events-none">
@@ -327,12 +306,71 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         {/* Live Video Preview container */}
         <div className="absolute inset-0 bg-black flex items-center justify-center">
           {cameraError ? (
-            <div className="p-8 text-center max-w-md z-20">
-              <div className="w-16 h-16 bg-red-950/40 border border-red-800/60 rounded-full flex items-center justify-center mx-auto mb-4 text-red-400">
+            <div className="p-8 text-center max-w-md z-20 flex flex-col items-center">
+              <div className="w-16 h-16 bg-red-950/40 border border-red-800/60 rounded-full flex items-center justify-center mb-4 text-red-400">
                 <Settings className="w-8 h-8 animate-spin-slow" />
               </div>
               <h3 className="text-white font-bold text-lg mb-2">Akses Kamera Terkendala</h3>
-              <p className="text-slate-400 text-sm">{cameraError}</p>
+              <p className="text-slate-400 text-sm mb-4">{cameraError}</p>
+              <div className="flex space-x-3 justify-center">
+                <button 
+                  onClick={() => setRetryCount(c => c + 1)}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors border border-white/20"
+                >
+                  Coba Ulang Izin
+                </button>
+                <label className="px-4 py-2 bg-[#00A8E8] hover:bg-[#00A8E8]/80 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer border border-transparent shadow-lg flex items-center">
+                  <span>Upload Foto Manual</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const base64 = event.target?.result as string;
+                          // Merge with selected frame or custom overlay just like performCapture
+                          const imgObj = new Image();
+                          imgObj.onload = async () => {
+                            const canvas = document.createElement("canvas");
+                            const width = 1280;
+                            const height = 720;
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext("2d");
+                            if (!ctx) return;
+                            
+                            // Draw uploaded image (scaled/centered)
+                            // We don't mirror uploaded photos usually, so no scale(-1, 1).
+                            ctx.drawImage(imgObj, 0, 0, width, height);
+
+                            if (settings.customOverlay) {
+                              const overlayImg = new Image();
+                              overlayImg.onload = () => {
+                                ctx.drawImage(overlayImg, 0, 0, width, height);
+                                onPhotoCaptured(canvas.toDataURL("image/jpeg", settings.imageQuality), "custom-png");
+                              };
+                              overlayImg.src = settings.customOverlay;
+                            } else {
+                              const svgStr = selectedFrame.getSvgString(width, height, settings.customText);
+                              const svgImage = new Image();
+                              svgImage.onload = () => {
+                                ctx.drawImage(svgImage, 0, 0, width, height);
+                                onPhotoCaptured(canvas.toDataURL("image/jpeg", settings.imageQuality), selectedFrame.id);
+                              };
+                              svgImage.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+                            }
+                          };
+                          imgObj.src = base64;
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} 
+                  />
+                </label>
+              </div>
             </div>
           ) : !isCameraActive ? (
             <div className="flex flex-col items-center space-y-3 z-20">
@@ -396,166 +434,63 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         </div>
 
         {/* Bottom Captured Instruction Alert */}
-        <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none flex justify-center">
-          <div className="bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-lg border border-white/10 text-white/90 text-[13px] text-center font-medium">
-            Posisikan wajah Anda di tengah sebelum menekan tombol ambil foto.
-          </div>
+        <div className="absolute bottom-6 left-4 right-4 z-20 pointer-events-none flex justify-center">
+          <button
+            onClick={triggerCaptureSequence}
+            disabled={!isCameraActive || isCapturing}
+            className={`pointer-events-auto px-8 h-[56px] rounded-full font-medium text-[15px] transition-all duration-150 flex items-center justify-center space-x-3 shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${
+              !isCameraActive || isCapturing
+                ? "bg-white/80 text-black/50 cursor-not-allowed backdrop-blur-md"
+                : "bg-white text-black hover:scale-105 active:scale-95"
+            }`}
+          >
+            <Camera className={`w-[20px] h-[20px] ${isCapturing ? "animate-spin" : ""}`} />
+            <span>{isCapturing ? "Memproses..." : "Ambil Foto (3s)"}</span>
+          </button>
         </div>
       </div>
 
-      {/* DASHBOARD CONTROLS */}
-      <div className="lg:col-span-4 flex flex-col space-y-5">
-        
-        {/* Settings Module */}
-        <div className="bg-[#ffffff] border border-[#ebebeb] p-6 rounded-[8px] flex flex-col space-y-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+      {/* Frame Overlays Picker Row */}
+      <div className="w-full bg-[#ffffff] border border-[#ebebeb] p-5 rounded-[8px] flex flex-col shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-[#111111] text-[15px] font-medium tracking-[-0.01em]">Settings</h3>
-            <p className="text-[13px] text-[#666666] mt-1">Configure layout and design parameters</p>
-          </div>
-          
-          <div className="h-[1px] bg-[#e0e0e0] w-full" />
-          
-          {/* Dynamic Label Customization Input */}
-          <div className="flex flex-col mb-4">
-            <label htmlFor="custom-text-input" className="block text-[13px] font-medium text-[#444444] mb-2">Banner Custom Text</label>
-            <div className="relative">
-              <input
-                id="custom-text-input"
-                type="text"
-                className="w-full h-[40px] px-3 text-[14px] border border-[#d1d1d1] rounded-[6px] bg-[#ffffff] text-[#111111] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all"
-                placeholder="cth: Wisuda SIT Ar-Rahmah"
-                value={settings.customText}
-                onChange={(e) => setSettings({ ...settings, customText: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {/* Google Apps Script / Database URL Input */}
-          <div className="flex flex-col mb-4">
-            <label htmlFor="gas-url-input" className="block text-[13px] font-medium text-[#444444] mb-2 flex items-center justify-between">
-              <span>Database Sync URL</span>
-              <span className="text-[10px] text-[#2ba049] bg-[#eafdcf] px-1.5 py-0.5 rounded-sm">auto-saves</span>
-            </label>
-            <div className="relative">
-              <input
-                id="gas-url-input"
-                type="password"
-                className="w-full h-[40px] px-3 text-[13px] border border-[#d1d1d1] rounded-[6px] bg-[#fafafa] text-[#111111] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all font-mono"
-                placeholder="Paste Google Apps Script URL..."
-                value={settings.googleAppsScriptUrl || ""}
-                onChange={(e) => setSettings({ ...settings, googleAppsScriptUrl: e.target.value })}
-              />
-            </div>
-            <p className="text-[11px] text-[#888] mt-1.5 leading-snug">
-              Masukkan URL Code.gs untuk langsung auto-sync dan upload hasil ke Google Drive saat link dibuka.
-            </p>
-          </div>
-
-          {/* Swap Camera Device Selection (Crucial for Tablet front/back cameras) */}
-          {cameras.length > 1 && (
-            <div className="flex flex-col">
-              <label htmlFor="camera-select" className="block text-[13px] font-medium text-[#444444] mb-2">Camera Source</label>
-              <div className="relative">
-                <select
-                  id="camera-select"
-                  className="w-full h-[40px] px-3 text-[14px] border border-[#d1d1d1] rounded-[6px] bg-[#ffffff] text-[#111111] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all appearance-none cursor-pointer"
-                  value={settings.cameraDeviceId}
-                  onChange={(e) => setSettings({ ...settings, cameraDeviceId: e.target.value })}
-                >
-                  {cameras.map((c, idx) => (
-                    <option key={c.deviceId} value={c.deviceId}>
-                      {c.label || `Kamera ${idx + 1}`}
-                    </option>
-                  ))}
-                </select>
-                <RefreshCw className="absolute right-3 top-[12px] w-4 h-4 text-[#777777] pointer-events-none" />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Frame Overlays Picker Grid */}
-        <div className="flex-1 bg-[#ffffff] border border-[#ebebeb] p-6 rounded-[8px] flex flex-col space-y-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-[#111111] text-[15px] font-medium tracking-[-0.01em]">Frame Selection</h3>
-              <p className="text-[13px] text-[#666666] mt-1">Choose layout overlay</p>
-            </div>
-            <span className="bg-[#f0f0f0] text-[#333333] text-[11px] font-medium px-2 py-0.5 rounded-full">{FRAME_TEMPLATES.length} VARIANTS</span>
-          </div>
-
-          <div className="h-[1px] bg-[#e0e0e0] w-full" />
-
-          {/* Custom PNG Frame Upload Option */}
-          <div className="w-full flex items-center justify-between bg-[#fafafa] border border-[#d1d1d1] rounded-[6px] p-3">
-             <div className="flex flex-col">
-               <span className="text-[13px] font-medium text-[#111111]">Custom PNG Frame</span>
-               <span className="text-[11px] text-[#666666]">Upload transparent 16:9 image</span>
-             </div>
-             <div className="flex items-center space-x-2">
-               {settings.customOverlay && (
-                 <button 
-                   onClick={() => setSettings({ ...settings, customOverlay: null })}
-                   className="text-[12px] font-medium text-[#d93025] hover:underline"
-                 >
-                   Remove
-                 </button>
-               )}
-               <label className="px-3 py-1.5 bg-[#111111] text-white text-[12px] font-medium rounded-[4px] cursor-pointer hover:bg-[#333333] transition-colors">
-                 Upload
-                 <input type="file" accept="image/png" className="hidden" onChange={handleCustomOverlayUpload} />
-               </label>
-             </div>
-          </div>
-
-          {/* Grid Selection list */}
-          <div className={`grid grid-cols-2 gap-3 flex-1 overflow-y-auto max-h-[190px] pr-1 mt-2 ${settings.customOverlay ? "opacity-50 pointer-events-none" : ""}`}>
-            {FRAME_TEMPLATES.map((tpl) => {
-              const isSelected = selectedFrame.id === tpl.id;
-              return (
-                <button
-                  key={tpl.id}
-                  onClick={() => setSelectedFrame(tpl)}
-                  className={`relative p-3 rounded-[6px] border flex flex-col justify-between items-start text-left h-[100px] overflow-hidden transition-all duration-150 ${
-                    isSelected
-                      ? "bg-[#fafafa] border-[#111111] shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
-                      : "bg-[#ffffff] border-[#e0e0e0] hover:bg-[#f5f5f5] hover:border-[#d1d1d1]"
-                  }`}
-                >
-                  <div className="flex flex-col space-y-1 z-10 w-full pr-4">
-                    <span className={`text-[13px] font-medium tracking-tight line-clamp-1 ${isSelected ? "text-[#111111]" : "text-[#444444]"}`}>{tpl.name}</span>
-                    <span className="text-[11px] text-[#666666] leading-tight line-clamp-2">{tpl.description}</span>
-                  </div>
-
-                  {/* Gradient Indicator bar */}
-                  <div className={`w-full h-1 mt-3 rounded-full bg-gradient-to-r ${tpl.color}`} />
-
-                  {/* Tiny selection dot overlay */}
-                  {isSelected && (
-                     <div className="absolute top-3 right-3 w-4 h-4 bg-[#111111] rounded-full flex items-center justify-center">
-                       <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                     </div>
-                  )}
-                </button>
-              );
-            })}
+            <h3 className="text-[#111111] text-[15px] font-medium tracking-[-0.01em]">Pilih Frame</h3>
+            <p className="text-[13px] text-[#666666] mt-0.5">Geser untuk melihat opsi overlay frame photo booth Anda</p>
           </div>
         </div>
 
-        {/* Primary Action Take Photo Button */}
-        <button
-          onClick={triggerCaptureSequence}
-          disabled={!isCameraActive || isCapturing}
-          className={`w-full mt-2 py-0 h-[48px] rounded-[6px] font-medium text-[14px] transition-all duration-150 flex items-center justify-center space-x-2 border ${
-            !isCameraActive || isCapturing
-              ? "bg-[#f5f5f5] text-[#999999] border-[#e0e0e0] cursor-not-allowed"
-              : "bg-[#111111] text-[#ffffff] border-transparent hover:bg-[#333333] active:bg-[#000000]"
-          }`}
-        >
-          <Camera className={`w-[18px] h-[18px] ${isCapturing ? "animate-spin" : ""}`} />
-          <span>{isCapturing ? "Capturing..." : "Take Photo (3s Countdown)"}</span>
-        </button>
+        {/* Horizontal Row Selection list */}
+        <div className={`flex overflow-x-auto space-x-4 pb-4 ${settings.customOverlay ? "opacity-50 pointer-events-none" : ""}`}>
+          {FRAME_TEMPLATES.map((tpl) => {
+            const isSelected = selectedFrame.id === tpl.id;
+            return (
+              <button
+                key={tpl.id}
+                onClick={() => setSelectedFrame(tpl)}
+                className={`relative p-3 rounded-[6px] border flex flex-col justify-between items-start text-left shrink-0 w-[180px] h-[100px] overflow-hidden transition-all duration-150 ${
+                  isSelected
+                    ? "bg-[#fafafa] border-[#111111] shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+                    : "bg-[#ffffff] border-[#e0e0e0] hover:bg-[#f5f5f5] hover:border-[#d1d1d1]"
+                }`}
+              >
+                <div className="flex flex-col space-y-1 z-10 w-full pr-4">
+                  <span className={`text-[13px] font-medium tracking-tight line-clamp-1 ${isSelected ? "text-[#111111]" : "text-[#444444]"}`}>{tpl.name}</span>
+                  <span className="text-[11px] text-[#666666] leading-tight line-clamp-2">{tpl.description}</span>
+                </div>
 
+                {/* Gradient Indicator bar */}
+                <div className={`w-[80%] h-1.5 mt-auto rounded-full bg-gradient-to-r ${tpl.color}`} />
+
+                {/* Tiny selection dot overlay */}
+                {isSelected && (
+                   <div className="absolute top-3 right-3 w-4 h-4 bg-[#111111] rounded-full flex items-center justify-center">
+                     <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                   </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
