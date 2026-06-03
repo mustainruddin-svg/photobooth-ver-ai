@@ -124,8 +124,6 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     let active = true;
 
     async function startCamera() {
-      if (!settings.cameraDeviceId) return;
-      
       // Stop active stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -137,11 +135,16 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
       try {
         // We use optimal photo definitions to capture beautiful crisp resolution
         const constraints: MediaStreamConstraints = {
-          video: {
+          video: settings.cameraDeviceId ? {
             deviceId: { exact: settings.cameraDeviceId },
             width: { ideal: 1280 },
             height: { ideal: 720 },
             aspectRatio: { ideal: 1.7777777778 }, // 16:9
+          } : {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            aspectRatio: { ideal: 1.7777777778 }, // 16:9
+            facingMode: { ideal: "user" }
           },
           audio: false,
         };
@@ -155,6 +158,17 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
             videoRef.current.play();
           }
           setIsCameraActive(true);
+          
+          // Re-enumerate devices now that permission is granted
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter((d) => d.kind === "videoinput");
+          setCameras(videoDevices);
+          if (videoDevices.length > 0 && !settings.cameraDeviceId && videoDevices[0].deviceId) {
+            setSettings(prev => ({
+              ...prev,
+              cameraDeviceId: videoDevices[0].deviceId
+            }));
+          }
         }
       } catch (err: any) {
         console.error("Camera access failed", err);
