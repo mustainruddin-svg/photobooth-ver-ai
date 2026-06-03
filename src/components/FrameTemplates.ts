@@ -2,6 +2,17 @@ import { FrameTemplate } from "../types";
 
 export const FRAME_TEMPLATES: FrameTemplate[] = [
   {
+    id: "custom-frame-png",
+    name: "Custom (frame.png)",
+    description: "Overlay menggunakan file /frame.png dari folder public.",
+    color: "from-gray-700 to-gray-500",
+    imageUrl: "/frame.png",
+    getSvgString: (width: number, height: number) => {
+      // Return empty SVG space for the UI
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"></svg>`;
+    }
+  },
+  {
     id: "royal-gold",
     name: "Classic Gold & Blue",
     description: "Royal gold borders with Islamic geometric corner designs and deep blue banners.",

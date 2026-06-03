@@ -189,21 +189,6 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     }, 1000);
   };
 
-  const handleCustomOverlayUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type !== "image/png") {
-        alert("Please upload a PNG file with transparency.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setSettings({ ...settings, customOverlay: event.target?.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const performCapture = async () => {
     if (!videoRef.current) return;
     
@@ -246,13 +231,31 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           resolve(canvas.toDataURL("image/jpeg", settings.imageQuality));
         };
         img.onerror = (e) => reject(e);
-        img.src = settings.customOverlay;
+        img.src = settings.customOverlay!;
       });
       try {
         const finalImageBytes = await promise;
         onPhotoCaptured(finalImageBytes, "custom-png");
       } catch (e) {
         console.error("Error blending image with custom overlay:", e);
+      } finally {
+        setIsCapturing(false);
+      }
+    } else if (selectedFrame.imageUrl) {
+      const img = new Image();
+      const promise = new Promise<string>((resolve, reject) => {
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", settings.imageQuality));
+        };
+        img.onerror = (e) => reject(e);
+        img.src = selectedFrame.imageUrl!;
+      });
+      try {
+        const finalImageBytes = await promise;
+        onPhotoCaptured(finalImageBytes, selectedFrame.id);
+      } catch (e) {
+        console.error("Error blending image with frame overlay:", e);
       } finally {
         setIsCapturing(false);
       }
@@ -293,6 +296,8 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         <div className="absolute inset-0 z-10 pointer-events-none">
           {isCameraActive && settings.customOverlay ? (
             <img src={settings.customOverlay} alt="Custom Overlay" className="w-full h-full object-fill pointer-events-none" />
+          ) : isCameraActive && selectedFrame.imageUrl ? (
+            <img src={selectedFrame.imageUrl} alt="Frame Overlay" className="w-full h-full object-fill pointer-events-none" />
           ) : isCameraActive ? (
             <div 
               className="w-full h-full"
@@ -353,6 +358,13 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
                                 onPhotoCaptured(canvas.toDataURL("image/jpeg", settings.imageQuality), "custom-png");
                               };
                               overlayImg.src = settings.customOverlay;
+                            } else if (selectedFrame.imageUrl) {
+                              const overlayImg = new Image();
+                              overlayImg.onload = () => {
+                                ctx.drawImage(overlayImg, 0, 0, width, height);
+                                onPhotoCaptured(canvas.toDataURL("image/jpeg", settings.imageQuality), selectedFrame.id);
+                              };
+                              overlayImg.src = selectedFrame.imageUrl;
                             } else {
                               const svgStr = selectedFrame.getSvgString(width, height, settings.customText);
                               const svgImage = new Image();

@@ -4,6 +4,7 @@ export interface FrameTemplate {
   description: string;
   color: string;
   getSvgString: (width: number, height: number, customText?: string) => string;
+  imageUrl?: string;
 }
 
 export interface PhotoCaptureState {
