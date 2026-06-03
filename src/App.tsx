@@ -11,14 +11,35 @@ export default function App() {
   const [capturedFrameId, setCapturedFrameId] = useState<string>("royal-gold");
 
   // Global applet configuration states
-  const [settings, setSettings] = useState<AppSettings>({
-    googleAppsScriptUrl: "",
-    isSimulatorMode: true,
-    customText: "Wisuda SIT Ar-Rahmah",
-    cameraDeviceId: "",
-    imageQuality: 0.9,
-    customOverlay: null,
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    // When the link is opened, attempt to load the stored database configuration
+    // Defaulting to the provided user specific script.
+    const defaultUrl = "https://script.google.com/macros/s/AKfycbwXXVRTez5Z6B6u0HAmMKLXgXeNBwiG_ncpUlugMhSJv5U_oY6NLJHKVsABC6C4Y0pE/exec";
+    const savedUrl = localStorage.getItem("photobooth_gas_url") || defaultUrl;
+    const simulatorMode = savedUrl === "" ? true : false;
+
+    return {
+      googleAppsScriptUrl: savedUrl,
+      isSimulatorMode: simulatorMode,
+      customText: "Wisuda SIT Ar-Rahmah",
+      cameraDeviceId: "",
+      imageQuality: 0.9,
+      customOverlay: null,
+    };
   });
+
+  // Effect to persist the database URL automatically whenever it changes
+  React.useEffect(() => {
+    if (settings.googleAppsScriptUrl) {
+      localStorage.setItem("photobooth_gas_url", settings.googleAppsScriptUrl);
+      // Auto-disable simulator mode if a valid URL is provided
+      if (settings.isSimulatorMode && settings.googleAppsScriptUrl.trim() !== "") {
+        setSettings(prev => ({ ...prev, isSimulatorMode: false }));
+      }
+    } else {
+      localStorage.removeItem("photobooth_gas_url");
+    }
+  }, [settings.googleAppsScriptUrl, settings.isSimulatorMode]);
 
   const handlePhotoCaptured = (imageBytes: string, frameId: string) => {
     setCapturedImage(imageBytes);

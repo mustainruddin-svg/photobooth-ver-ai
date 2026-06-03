@@ -416,6 +416,27 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
             </div>
           </div>
 
+          {/* Google Apps Script / Database URL Input */}
+          <div className="flex flex-col mb-4">
+            <label htmlFor="gas-url-input" className="block text-[13px] font-medium text-[#444444] mb-2 flex items-center justify-between">
+              <span>Database Sync URL</span>
+              <span className="text-[10px] text-[#2ba049] bg-[#eafdcf] px-1.5 py-0.5 rounded-sm">auto-saves</span>
+            </label>
+            <div className="relative">
+              <input
+                id="gas-url-input"
+                type="password"
+                className="w-full h-[40px] px-3 text-[13px] border border-[#d1d1d1] rounded-[6px] bg-[#fafafa] text-[#111111] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all font-mono"
+                placeholder="Paste Google Apps Script URL..."
+                value={settings.googleAppsScriptUrl || ""}
+                onChange={(e) => setSettings({ ...settings, googleAppsScriptUrl: e.target.value })}
+              />
+            </div>
+            <p className="text-[11px] text-[#888] mt-1.5 leading-snug">
+              Masukkan URL Code.gs untuk langsung auto-sync dan upload hasil ke Google Drive saat link dibuka.
+            </p>
+          </div>
+
           {/* Swap Camera Device Selection (Crucial for Tablet front/back cameras) */}
           {cameras.length > 1 && (
             <div className="flex flex-col">
