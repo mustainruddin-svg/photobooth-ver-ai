@@ -3,7 +3,9 @@ export interface FrameTemplate {
   name: string;
   description: string;
   color: string;
+  captureCount?: number;
   getSvgString: (width: number, height: number, customText?: string) => string;
+  previewSvgString?: (width: number, height: number, customText?: string) => string;
   imageUrl?: string;
 }
 

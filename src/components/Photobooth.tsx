@@ -20,9 +20,12 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedFrames, setCapturedFrames] = useState<string[]>([]);
+  const [currentCaptureIndex, setCurrentCaptureIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const captureFramesRef = useRef<string[]>([]);
 
   // Sound effects using Web Audio API (No files needed)
   const playBeep = (freq: number, duration: number) => {
@@ -143,10 +146,10 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter((d) => d.kind === "videoinput");
           if (videoDevices.length > 0 && !settings.cameraDeviceId && videoDevices[0].deviceId) {
-            setSettings(prev => ({
-              ...prev,
+            setSettings({
+              ...settings,
               cameraDeviceId: videoDevices[0].deviceId
-            }));
+            });
           }
         }
       } catch (err: any) {
@@ -171,20 +174,33 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
 
   const triggerCaptureSequence = () => {
     if (isCapturing || !isCameraActive) return;
+    const captureCount = settings.customOverlay ? 1 : (selectedFrame.captureCount || 1);
+    captureFramesRef.current = [];
+    setCapturedFrames([]);
+    setCurrentCaptureIndex(0);
+    runCaptureStep(0, captureCount);
+  };
+
+  const runCaptureStep = (stepIndex: number, totalSteps: number) => {
     setIsCapturing(true);
+    setCurrentCaptureIndex(stepIndex);
     let count = 3;
     setCountdown(count);
-    playBeep(880, 80); // beep countdown
+    playBeep(880, 80);
 
     const interval = setInterval(() => {
       count -= 1;
       if (count > 0) {
         setCountdown(count);
-        playBeep(880, 80); // beep countdown
+        playBeep(880, 80);
       } else {
         clearInterval(interval);
         setCountdown(null);
-        performCapture();
+        if (totalSteps > 1) {
+          captureOneFrame(stepIndex, totalSteps);
+        } else {
+          performCapture();
+        }
       }
     }, 1000);
   };
@@ -287,6 +303,93 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     }
   };
 
+  const captureOneFrame = async (stepIndex: number, totalSteps: number) => {
+    if (!videoRef.current) return;
+
+    playShutterSound();
+    setShowFlash(true);
+    setTimeout(() => setShowFlash(false), 400);
+
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    const vidW = video.videoWidth || 1280;
+    const vidH = video.videoHeight || 720;
+    canvas.width = vidW;
+    canvas.height = vidH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.translate(vidW, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, vidW, vidH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const frameData = canvas.toDataURL("image/jpeg", 0.95);
+    const newFrames = [...captureFramesRef.current, frameData];
+    captureFramesRef.current = newFrames;
+    setCapturedFrames([...newFrames]);
+
+    if (stepIndex + 1 < totalSteps) {
+      setTimeout(() => runCaptureStep(stepIndex + 1, totalSteps), 800);
+    } else {
+      await compositeStrip(newFrames);
+    }
+  };
+
+  const compositeStrip = async (frames: string[]) => {
+    const STRIP_W = 640;
+    const STRIP_M = 20;
+    const STRIP_PW = STRIP_W - STRIP_M * 2;
+    const STRIP_PH = Math.round(STRIP_PW * 9 / 16);
+    const STRIP_GAP = 24;
+    const STRIP_TOP = 60;
+    const STRIP_BOTTOM = 168;
+    const STRIP_H = STRIP_TOP + frames.length * STRIP_PH + (frames.length - 1) * STRIP_GAP + STRIP_BOTTOM;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = STRIP_W;
+    canvas.height = STRIP_H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = "#0D1117";
+    ctx.fillRect(0, 0, STRIP_W, STRIP_H);
+
+    for (let i = 0; i < frames.length; i++) {
+      const py = STRIP_TOP + i * (STRIP_PH + STRIP_GAP);
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, STRIP_M, py, STRIP_PW, STRIP_PH);
+          resolve();
+        };
+        img.src = frames[i];
+      });
+    }
+
+    const svgStr = selectedFrame.getSvgString(STRIP_W, STRIP_H, settings.customText);
+    await new Promise<void>((resolve) => {
+      const svgImg = new Image();
+      svgImg.onload = () => {
+        ctx.drawImage(svgImg, 0, 0, STRIP_W, STRIP_H);
+        resolve();
+      };
+      svgImg.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+    });
+
+    try {
+      const finalImageBytes = canvas.toDataURL("image/jpeg", settings.imageQuality);
+      onPhotoCaptured(finalImageBytes, selectedFrame.id);
+    } catch (e) {
+      console.error("Error compositing strip:", e);
+    } finally {
+      captureFramesRef.current = [];
+      setCapturedFrames([]);
+      setCurrentCaptureIndex(0);
+      setIsCapturing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto space-y-6">
       {/* CAMERA SCREEN PREVIEW AREA */}
@@ -299,11 +402,11 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           ) : isCameraActive && selectedFrame.imageUrl ? (
             <img src={selectedFrame.imageUrl} alt="Frame Overlay" className="w-full h-full object-fill pointer-events-none" />
           ) : isCameraActive ? (
-            <div 
+            <div
               className="w-full h-full"
-              dangerouslySetInnerHTML={{ 
-                __html: selectedFrame.getSvgString(1280, 720, settings.customText) 
-              }} 
+              dangerouslySetInnerHTML={{
+                __html: (selectedFrame.previewSvgString ?? selectedFrame.getSvgString)(1280, 720, settings.customText)
+              }}
             />
           ) : null}
         </div>
@@ -426,10 +529,15 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="absolute inset-0 flex items-center justify-center z-40 bg-black/30 backdrop-blur-xs pointer-events-none"
             >
-              <div className="bg-slate-950/80 border-2 border-[#D4AF37] h-40 w-40 rounded-full flex items-center justify-center shadow-2xl">
+              <div className="bg-slate-950/80 border-2 border-[#D4AF37] h-40 w-40 rounded-full flex flex-col items-center justify-center shadow-2xl gap-0.5">
                 <span className="text-6xl font-sans font-black text-[#D4AF37] animate-pulse">
                   {countdown}
                 </span>
+                {(selectedFrame.captureCount || 1) > 1 && (
+                  <span className="text-[#D4AF37]/70 text-[11px] font-bold tracking-wider">
+                    FOTO {currentCaptureIndex + 1}/{selectedFrame.captureCount}
+                  </span>
+                )}
               </div>
             </motion.div>
           )}
@@ -445,19 +553,61 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           <span className="text-white/80 font-bold text-[11px]">16:9 HD</span>
         </div>
 
-        {/* Bottom Captured Instruction Alert */}
+        {/* Captured frames thumbnails for multi-capture */}
+        <AnimatePresence>
+          {capturedFrames.length > 0 && (selectedFrame.captureCount || 1) > 1 && (
+            <div className="absolute top-4 right-4 z-30 flex flex-col space-y-1.5">
+              {Array.from({ length: selectedFrame.captureCount || 1 }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0.6, opacity: 0, x: 20 }}
+                  animate={{ scale: 1, opacity: 1, x: 0 }}
+                  className={`w-[72px] aspect-video rounded overflow-hidden border-2 shadow-lg ${
+                    i < capturedFrames.length
+                      ? "border-[#D4AF37]"
+                      : "border-[#D4AF37]/20 bg-black/30"
+                  }`}
+                >
+                  {i < capturedFrames.length && (
+                    <img src={capturedFrames[i]} className="w-full h-full object-cover" alt={`Foto ${i + 1}`} />
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Bottom Capture Button */}
         <div className="absolute bottom-6 left-4 right-4 z-20 pointer-events-none flex justify-center">
           <button
             onClick={triggerCaptureSequence}
             disabled={!isCameraActive || isCapturing}
-            className={`pointer-events-auto px-8 h-[56px] rounded-full font-medium text-[15px] transition-all duration-150 flex items-center justify-center space-x-3 shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${
+            className={`pointer-events-auto px-7 h-[52px] rounded-full font-medium text-[14px] transition-all duration-150 flex items-center justify-center space-x-2.5 ${
               !isCameraActive || isCapturing
-                ? "bg-white/80 text-black/50 cursor-not-allowed backdrop-blur-md"
-                : "bg-white text-black hover:scale-105 active:scale-95"
+                ? "bg-white/80 text-black/40 cursor-not-allowed backdrop-blur-md shadow-lg"
+                : "bg-white text-black hover:scale-[1.03] active:scale-[0.97] shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
             }`}
           >
-            <Camera className={`w-[20px] h-[20px] ${isCapturing ? "animate-spin" : ""}`} />
-            <span>{isCapturing ? "Memproses..." : "Ambil Foto (3s)"}</span>
+            <Camera className={`w-[18px] h-[18px] ${isCapturing ? "animate-pulse" : ""}`} />
+            <span>
+              {isCapturing
+                ? capturedFrames.length >= (selectedFrame.captureCount || 1)
+                  ? "Menyusun Strip..."
+                  : (selectedFrame.captureCount || 1) > 1
+                  ? `Foto ${capturedFrames.length + 1}/${selectedFrame.captureCount}`
+                  : "Memproses..."
+                : (selectedFrame.captureCount || 1) > 1
+                ? `Ambil ${selectedFrame.captureCount} Foto`
+                : "Ambil Foto"}
+            </span>
+            {!isCapturing && (selectedFrame.captureCount || 1) > 1 && (
+              <span className="bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                3s/foto
+              </span>
+            )}
+            {!isCapturing && (selectedFrame.captureCount || 1) === 1 && (
+              <span className="text-black/40 text-[12px]">(3s)</span>
+            )}
           </button>
         </div>
       </div>
@@ -472,32 +622,57 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
         </div>
 
         {/* Horizontal Row Selection list */}
-        <div className={`flex overflow-x-auto space-x-4 pb-4 ${settings.customOverlay ? "opacity-50 pointer-events-none" : ""}`}>
+        <div className={`flex overflow-x-auto space-x-3 pb-3 ${settings.customOverlay ? "opacity-50 pointer-events-none" : ""}`}>
           {FRAME_TEMPLATES.map((tpl) => {
             const isSelected = selectedFrame.id === tpl.id;
+            const previewSrc = tpl.imageUrl
+              ? tpl.imageUrl
+              : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+                  (tpl.previewSvgString ?? tpl.getSvgString)(312, 176, settings.customText)
+                )}`;
             return (
               <button
                 key={tpl.id}
                 onClick={() => setSelectedFrame(tpl)}
-                className={`relative p-3 rounded-[6px] border flex flex-col justify-between items-start text-left shrink-0 w-[180px] h-[100px] overflow-hidden transition-all duration-150 ${
+                className={`relative flex flex-col rounded-[8px] border overflow-hidden text-left shrink-0 w-[152px] transition-all duration-200 ${
                   isSelected
-                    ? "bg-[#fafafa] border-[#111111] shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
-                    : "bg-[#ffffff] border-[#e0e0e0] hover:bg-[#f5f5f5] hover:border-[#d1d1d1]"
+                    ? "border-[#111111] shadow-[0_2px_10px_rgba(0,0,0,0.1)]"
+                    : "border-[#e0e0e0] hover:border-[#bbb] hover:shadow-[0_1px_6px_rgba(0,0,0,0.05)]"
                 }`}
               >
-                <div className="flex flex-col space-y-1 z-10 w-full pr-4">
-                  <span className={`text-[13px] font-medium tracking-tight line-clamp-1 ${isSelected ? "text-[#111111]" : "text-[#444444]"}`}>{tpl.name}</span>
-                  <span className="text-[11px] text-[#666666] leading-tight line-clamp-2">{tpl.description}</span>
+                {/* Thumbnail preview */}
+                <div className="w-full h-[85px] overflow-hidden bg-[#111] relative">
+                  <img
+                    src={previewSrc}
+                    alt={tpl.name}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Multi-capture badge */}
+                  {tpl.captureCount && tpl.captureCount > 1 && (
+                    <div className="absolute top-1.5 left-1.5 bg-violet-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm flex items-center gap-1">
+                      <Camera className="w-2.5 h-2.5" />
+                      <span>{tpl.captureCount} FOTO</span>
+                    </div>
+                  )}
+                  {/* Gradient color strip at bottom of thumbnail */}
+                  <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${tpl.color}`} />
                 </div>
 
-                {/* Gradient Indicator bar */}
-                <div className={`w-[80%] h-1.5 mt-auto rounded-full bg-gradient-to-r ${tpl.color}`} />
+                {/* Card info */}
+                <div className={`px-2.5 py-2 ${isSelected ? "bg-[#fafafa]" : "bg-white"}`}>
+                  <span className={`block text-[12px] font-semibold tracking-tight line-clamp-1 ${isSelected ? "text-[#111]" : "text-[#333]"}`}>
+                    {tpl.name}
+                  </span>
+                  <span className="block text-[10px] text-[#888] mt-0.5 leading-tight line-clamp-2">
+                    {tpl.description}
+                  </span>
+                </div>
 
-                {/* Tiny selection dot overlay */}
+                {/* Selection indicator */}
                 {isSelected && (
-                   <div className="absolute top-3 right-3 w-4 h-4 bg-[#111111] rounded-full flex items-center justify-center">
-                     <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                   </div>
+                  <div className="absolute top-2 right-2 w-4 h-4 bg-[#111111] rounded-full flex items-center justify-center shadow">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                  </div>
                 )}
               </button>
             );

@@ -177,5 +177,99 @@ export const FRAME_TEMPLATES: FrameTemplate[] = [
         </g>
       </svg>`;
     }
+  },
+  {
+    id: "triple-strip",
+    name: "Triple Strip Classic",
+    description: "Ambil 3 foto berurutan, otomatis disusun jadi strip fotobooth vertikal.",
+    color: "from-violet-600 via-fuchsia-500 to-pink-400",
+    captureCount: 3,
+    previewSvgString: (width: number, height: number, customText?: string) => {
+      const bannerText = customText || "Wisuda SIT Ar-Rahmah";
+      const topPad = Math.round(height * 0.08);
+      const bH = Math.round(height * 0.27);
+      const gapH = Math.round(height * 0.04);
+      const b1y = topPad;
+      const b2y = b1y + bH + gapH;
+      const b3y = b2y + bH + gapH;
+      const bottomY = b3y + bH;
+      const gold = "#D4AF37";
+      const dark = "#0D1117";
+      const m = 15;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none">
+        <rect x="0" y="0" width="${width}" height="${topPad}" fill="${dark}" opacity="0.9" />
+        <rect x="0" y="${b1y + bH}" width="${width}" height="${gapH}" fill="${dark}" opacity="0.9" />
+        <rect x="0" y="${b2y + bH}" width="${width}" height="${gapH}" fill="${dark}" opacity="0.9" />
+        <rect x="0" y="${bottomY}" width="${width}" height="${height - bottomY}" fill="${dark}" opacity="0.9" />
+        <rect x="${m}" y="${b1y}" width="${width - 2*m}" height="${bH}" rx="3" stroke="${gold}" stroke-width="2" fill="none" />
+        <rect x="${m}" y="${b2y}" width="${width - 2*m}" height="${bH}" rx="3" stroke="${gold}" stroke-width="2" fill="none" />
+        <rect x="${m}" y="${b3y}" width="${width - 2*m}" height="${bH}" rx="3" stroke="${gold}" stroke-width="2" fill="none" />
+        <rect x="${m + 8}" y="${b1y + 6}" width="26" height="20" rx="4" fill="${gold}" />
+        <text x="${m + 21}" y="${b1y + 20}" font-family="'Inter',sans-serif" font-weight="900" font-size="12" fill="#0D1117" text-anchor="middle">1</text>
+        <rect x="${m + 8}" y="${b2y + 6}" width="26" height="20" rx="4" fill="${gold}" />
+        <text x="${m + 21}" y="${b2y + 20}" font-family="'Inter',sans-serif" font-weight="900" font-size="12" fill="#0D1117" text-anchor="middle">2</text>
+        <rect x="${m + 8}" y="${b3y + 6}" width="26" height="20" rx="4" fill="${gold}" />
+        <text x="${m + 21}" y="${b3y + 20}" font-family="'Inter',sans-serif" font-weight="900" font-size="12" fill="#0D1117" text-anchor="middle">3</text>
+        <text x="${width/2}" y="${Math.round(topPad * 0.72)}" font-family="'Inter',sans-serif" font-weight="800" font-size="13" fill="${gold}" text-anchor="middle" letter-spacing="2">TRIPLE PHOTO STRIP</text>
+        <text x="${width/2}" y="${height - 10}" font-family="'Inter',sans-serif" font-weight="600" font-size="12" fill="${gold}" text-anchor="middle">${bannerText}</text>
+        <circle cx="${width/2}" cy="${b1y + bH + gapH/2}" r="2.5" fill="${gold}" opacity="0.7" />
+        <circle cx="${width/2}" cy="${b2y + bH + gapH/2}" r="2.5" fill="${gold}" opacity="0.7" />
+      </svg>`;
+    },
+    getSvgString: (width: number, height: number, customText?: string) => {
+      const bannerText = customText || "Wisuda SIT Ar-Rahmah";
+      const margin = 20;
+      const panelW = width - margin * 2;
+      const panelH = Math.round(panelW * 9 / 16);
+      const gap = 24;
+      const topPad = 60;
+      const p1y = topPad;
+      const p2y = p1y + panelH + gap;
+      const p3y = p2y + panelH + gap;
+      const bottomY = p3y + panelH;
+      const gold = "#D4AF37";
+      const dark = "#0D1117";
+      const cs = 16;
+
+      const panelBorder = (x: number, y: number, w: number, h: number, num: string): string => `
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" stroke="${gold}" stroke-width="2" fill="none" />
+        <rect x="${x}" y="${y}" width="${cs}" height="2.5" fill="${gold}" />
+        <rect x="${x}" y="${y}" width="2.5" height="${cs}" fill="${gold}" />
+        <rect x="${x+w-cs}" y="${y}" width="${cs}" height="2.5" fill="${gold}" />
+        <rect x="${x+w-2.5}" y="${y}" width="2.5" height="${cs}" fill="${gold}" />
+        <rect x="${x}" y="${y+h-2.5}" width="${cs}" height="2.5" fill="${gold}" />
+        <rect x="${x}" y="${y+h-cs}" width="2.5" height="${cs}" fill="${gold}" />
+        <rect x="${x+w-cs}" y="${y+h-2.5}" width="${cs}" height="2.5" fill="${gold}" />
+        <rect x="${x+w-2.5}" y="${y+h-cs}" width="2.5" height="${cs}" fill="${gold}" />
+        <rect x="${x+w-32}" y="${y+6}" width="26" height="19" rx="4" fill="${gold}" />
+        <text x="${x+w-19}" y="${y+19}" font-family="'Inter',sans-serif" font-weight="900" font-size="11" fill="#0D1117" text-anchor="middle">${num}</text>
+      `;
+
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none">
+        <rect x="0" y="0" width="${width}" height="${topPad}" fill="${dark}" />
+        <rect x="0" y="${topPad}" width="${margin}" height="${bottomY - topPad}" fill="${dark}" />
+        <rect x="${margin + panelW}" y="${topPad}" width="${margin}" height="${bottomY - topPad}" fill="${dark}" />
+        <rect x="0" y="${p1y + panelH}" width="${width}" height="${gap}" fill="${dark}" />
+        <rect x="0" y="${p2y + panelH}" width="${width}" height="${gap}" fill="${dark}" />
+        <rect x="0" y="${bottomY}" width="${width}" height="${height - bottomY}" fill="${dark}" />
+        <rect x="5" y="5" width="${width - 10}" height="${height - 10}" rx="4" stroke="${gold}" stroke-width="1.5" fill="none" opacity="0.4" />
+        <line x1="${margin}" y1="48" x2="${width - margin}" y2="48" stroke="${gold}" stroke-width="0.5" opacity="0.35" />
+        <text x="${width/2}" y="35" font-family="'Inter',sans-serif" font-weight="900" font-size="14" fill="${gold}" text-anchor="middle" letter-spacing="3">${bannerText.toUpperCase()}</text>
+        ${panelBorder(margin, p1y, panelW, panelH, "1")}
+        ${panelBorder(margin, p2y, panelW, panelH, "2")}
+        ${panelBorder(margin, p3y, panelW, panelH, "3")}
+        <line x1="${width * 0.28}" y1="${p1y + panelH + gap/2}" x2="${width * 0.46}" y2="${p1y + panelH + gap/2}" stroke="${gold}" stroke-width="1" opacity="0.45" />
+        <circle cx="${width/2}" cy="${p1y + panelH + gap/2}" r="3" fill="${gold}" opacity="0.75" />
+        <line x1="${width * 0.54}" y1="${p1y + panelH + gap/2}" x2="${width * 0.72}" y2="${p1y + panelH + gap/2}" stroke="${gold}" stroke-width="1" opacity="0.45" />
+        <line x1="${width * 0.28}" y1="${p2y + panelH + gap/2}" x2="${width * 0.46}" y2="${p2y + panelH + gap/2}" stroke="${gold}" stroke-width="1" opacity="0.45" />
+        <circle cx="${width/2}" cy="${p2y + panelH + gap/2}" r="3" fill="${gold}" opacity="0.75" />
+        <line x1="${width * 0.54}" y1="${p2y + panelH + gap/2}" x2="${width * 0.72}" y2="${p2y + panelH + gap/2}" stroke="${gold}" stroke-width="1" opacity="0.45" />
+        <rect x="${margin}" y="${bottomY + 12}" width="${panelW}" height="${height - bottomY - 20}" rx="4" fill="#111827" stroke="${gold}" stroke-width="1.5" />
+        <text x="${width/2}" y="${bottomY + 37}" font-family="'Inter',sans-serif" font-weight="800" font-size="12" fill="#FFFFFF" text-anchor="middle" letter-spacing="2.5">PHOTOBOOTH</text>
+        <text x="${width/2}" y="${bottomY + 55}" font-family="'JetBrains Mono',monospace" font-size="10" fill="${gold}" text-anchor="middle" opacity="0.9" letter-spacing="2">YAYASAN AR-RAHMAH</text>
+        <circle cx="${margin + 8}" cy="${topPad - 12}" r="3" fill="${gold}" opacity="0.6" />
+        <circle cx="${width - margin - 8}" cy="${topPad - 12}" r="3" fill="${gold}" opacity="0.6" />
+      </svg>`;
+    }
   }
 ];
