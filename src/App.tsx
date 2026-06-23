@@ -27,6 +27,7 @@ export default function App() {
       cameraDeviceId: "",
       imageQuality: 0.9,
       customOverlay: null,
+      mirrorCamera: true,
     };
   });
 

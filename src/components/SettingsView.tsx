@@ -74,6 +74,26 @@ export function SettingsView({ settings, setSettings, cameras }: SettingsViewPro
               </div>
             </div>
           )}
+
+          {/* Mirror Camera Setting */}
+          <div className="flex flex-col">
+            <label className="flex items-center space-x-3 cursor-pointer mt-2 w-fit">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={settings.mirrorCamera}
+                  onChange={(e) => setSettings({ ...settings, mirrorCamera: e.target.checked })}
+                />
+                <div className={`block w-10 h-6 rounded-full transition-colors ${settings.mirrorCamera ? "bg-[#111111]" : "bg-[#e0e0e0]"}`}></div>
+                <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${settings.mirrorCamera ? "translate-x-4" : "translate-x-0"}`}></div>
+              </div>
+              <span className="text-[14px] font-medium text-[#444444]">Mirror Camera</span>
+            </label>
+            <p className="text-[12px] text-[#888] mt-1 leading-snug">
+              Flip the camera view horizontally (like a mirror). Keep this enabled if using a front-facing camera.
+            </p>
+          </div>
         </div>
       </div>
     </div>

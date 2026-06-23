@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Camera, RefreshCw, Settings, Sliders, Sparkles, Wand2 } from "lucide-react";
+import { Camera, RefreshCw, Settings, Sliders, Sparkles, Wand2, FlipHorizontal } from "lucide-react";
 import { FRAME_TEMPLATES } from "./FrameTemplates";
 import { AppSettings, FrameTemplate } from "../types";
 import { motion, AnimatePresence } from "motion/react";
@@ -215,9 +215,11 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Draw video feed (Mirrored by default to match selfie preview)
-    ctx.translate(width, 0);
-    ctx.scale(-1, 1);
+    // Draw video feed (Mirrored if enabled)
+    if (settings.mirrorCamera) {
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+    }
     ctx.drawImage(video, 0, 0, width, height);
     
     // Reset transform to draw frame overlay in correct orientation
@@ -391,13 +393,13 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
             </div>
           ) : null}
 
-          {/* Video Stream Element (Mirrored via CSS) */}
+          {/* Video Stream Element */}
           <video
             ref={videoRef}
             aria-label="Live camera preview"
             className={`w-full h-full object-cover transition-transform duration-500 ${
               isCameraActive ? "opacity-100" : "opacity-0"
-            } scale-x-[-1]`}
+            } ${settings.mirrorCamera ? "scale-x-[-1]" : ""}`}
             playsInline
             muted
           />
@@ -444,6 +446,23 @@ export default function Photobooth({ settings, setSettings, onPhotoCaptured }: P
           <span className="text-white/40">|</span>
           <span className="text-white/80 font-bold text-[11px]">16:9 HD</span>
         </div>
+
+        {/* Quick Toggles Overlay */}
+        {isCameraActive && (
+          <div className="absolute top-4 right-4 z-20 flex flex-col space-y-2">
+            <button
+              onClick={() => setSettings({ ...settings, mirrorCamera: !settings.mirrorCamera })}
+              className={`p-2 rounded-full backdrop-blur-md border transition-colors ${
+                settings.mirrorCamera 
+                  ? "bg-white/20 text-white border-white/40 hover:bg-white/30" 
+                  : "bg-black/40 text-white/70 border-white/10 hover:bg-black/60"
+              }`}
+              title="Mirror Camera"
+            >
+              <FlipHorizontal className="w-5 h-5" />
+            </button>
+          </div>
+        )}
 
         {/* Bottom Captured Instruction Alert */}
         <div className="absolute bottom-6 left-4 right-4 z-20 pointer-events-none flex justify-center">

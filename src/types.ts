@@ -20,4 +20,5 @@ export interface AppSettings {
   cameraDeviceId: string;
   imageQuality: number;
   customOverlay: string | null;
+  mirrorCamera: boolean;
 }
